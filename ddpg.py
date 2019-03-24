@@ -1,15 +1,15 @@
-###########################################################
-###     This file contains an implementation of         ###
-###     the DQN-Algorithm first published by            ###
-###     Lillicrap et al. in Sep. 2015.                  ###
-###########################################################
-###     This implementation is written by Arne Koeller  ###
-###########################################################
-###     References that have been used:                 ###
-###     Lillicrap et al. (2015)                         ###
-###     https://github.com/yanpanlau/DDPG-Keras-Torcs   ###
-###     https://github.com/cookbenjamin/DDPG            ###
-###########################################################
+# ###########################################################
+# ###     This file contains an implementation of         ###
+# ###     the DQN-Algorithm first published by            ###
+# ###     Lillicrap et al. in Sep. 2015.                  ###
+# ###########################################################
+# ###     This implementation is written by Arne Koeller  ###
+# ###########################################################
+# ###     References that have been used:                 ###
+# ###     Lillicrap et al. (2015)                         ###
+# ###     https://github.com/yanpanlau/DDPG-Keras-Torcs   ###
+# ###     https://github.com/cookbenjamin/DDPG            ###
+# ###########################################################
 
 import sys
 from gym_torcs import TorcsEnv
@@ -23,9 +23,9 @@ import tensorflow as tf
 from keras import backend as K
 
 
-from util import ExperienceReplayBuffer
 from util import DatasetBuilder
 from util import OU
+from util import ExperienceReplayBuffer
 
 from ddpg_actor import Actor
 from ddpg_critic import Critic
@@ -51,13 +51,13 @@ class DDPGAgent:
 
         ### DDPG Hyperparameters
         self.epsilon = 1.0
-        self.epsilon_decay = 0.9999
+        self.epsilon_decay = 1/11000
         self.epsilon_min = 0.07
         self.batch_size = 64
         self.gamma = 0.99
         self.tau = 0.001
-        self.lr_actor = 0.00011
-        self.lr_critic = 0.0012
+        self.lr_actor = 0.0001
+        self.lr_critic = 0.001
 
         ### set OU Process
         self.ou = OU()
@@ -69,12 +69,13 @@ class DDPGAgent:
         K.set_session(self.sess)
 
         ### actor, critic and replay memory
-        self.actor = Actor(self.sess, self.state_size, self.action_size, self.batch_size, self.tau, self.lr_actor)
-        self.critic = Critic(self.sess, self.state_size, self.action_size, self.batch_size, self.tau, self.lr_critic)
+        self.actor = Actor(self.sess, self.state_size, self.action_size, self.tau, self.lr_actor)
+        self.critic = Critic(self.sess, self.state_size, self.action_size, self.tau, self.lr_critic)
         self.memory = ExperienceReplayBuffer(50000)   
 
         ### helper class to build state representation
         self.dataset_builder = DatasetBuilder()
+        
 
     def saveModel(self):
         self.actor.model.save("./ddpg_weights/ddpg_actor_model.h5")
@@ -82,11 +83,14 @@ class DDPGAgent:
 
     def lowerExploration(self):
         if self.epsilon > self.epsilon_min:
-            self.epsilon *= self.epsilon_decay
+            self.epsilon -= self.epsilon_decay
         
     def trainAgent(self):   
 
         all_total_rewards = []
+        all_dist_raced = []
+        all_dist_percentage = []
+        all_avg_speed = []
 
         for e in range(self.max_episodes):
 
@@ -104,14 +108,14 @@ class DDPGAgent:
                 state = self.env.reset()
 
        
-            #s_t = np.hstack((ob.angle, ob.track, ob.trackPos, ob.speedX, ob.speedY,  ob.speedZ, ob.wheelSpinVel/100.0, ob.rpm))
-            state = np.hstack((state.angle, state.track, state.focus, state.opponents ,state.trackPos, state.speedX, state.speedY,  state.speedZ, state.wheelSpinVel/100.0, state.rpm))
-            #state, _ = self.dataset_builder.buildStateDataSet(s=state)
+            ### build state representation 
+            state, _ = self.dataset_builder.buildStateDataSet(s=state)
+            
 
             total_reward = 0
+            avg_speed = 0
 
             for j in range(self.max_steps):
-                
                 ### initialize numpy matrices to hold action values with OU noise
                 action_with_noise = np.zeros([1,self.action_size])
                 noise = np.zeros([1,self.action_size])
@@ -124,9 +128,9 @@ class DDPGAgent:
                 ###     https://yanpanlau.github.io/2016/10/11/Torcs-Keras.html ###
                 ###     and own experiment                                      ###
                 ###################################################################
-                noise[0][0] = max(self.epsilon, 0) * self.ou.function(action[0][0],  0.0 , 0.55, 0.30)
-                noise[0][1] = max(self.epsilon, 0) * self.ou.function(action[0][1],  0.55 , 1.00, 0.10)
-                noise[0][2] = max(self.epsilon, 0) * self.ou.function(action[0][2], -0.1 , 1.00, 0.05)
+                noise[0][0] = max(self.epsilon, 0) * self.ou.calc_noise(action[0][0],  0.0 , 0.55, 0.15)
+                noise[0][1] = max(self.epsilon, 0) * self.ou.calc_noise(action[0][1],  0.55 , 1.00, 0.10)
+                noise[0][2] = max(self.epsilon, 0) * self.ou.calc_noise(action[0][2], -0.1 , 1.00, 0.05)
 
                 ###################################################################
                 ### Concept of a "stochastic" break adapted and improved from   ###
@@ -135,10 +139,10 @@ class DDPGAgent:
                 ### time isn't adequatly represented in the                     ###
                 ### reward function. Therefore we "hack" the OU-Process         ###
                 ### by triggering the brake with a chance of                    ###
-                ### min(0.2, self.epsilon)                                      ###
+                ### min(0.18, self.epsilon)                                     ###
                 ################################################################### 
-                if random.random() <= min(0.2, self.epsilon):
-                   noise[0][2] = max(self.epsilon, 0) * self.ou.function(action[0][2],  0.25 , 1.00, 0.10)
+                if random.random() <= min(0.18, self.epsilon):
+                   noise[0][2] = max(self.epsilon, 0) * self.ou.calc_noise(action[0][2],  0.25 , 1.00, 0.10)
 
                 ### Add OU noise to actions
                 action_with_noise[0][0] = action[0][0] + noise[0][0]
@@ -147,10 +151,12 @@ class DDPGAgent:
 
                 next_state, reward, done, info = self.env.step(action_with_noise[0])
 
-                #s_t1 = np.hstack((ob.angle, ob.track, ob.trackPos, ob.speedX, ob.speedY, ob.speedZ, ob.wheelSpinVel/100.0, ob.rpm))
+                ### build state representation
+                dist_raced = next_state.distRaced
+                speedX = next_state.speedX
+                print(speedX)
                 next_state = np.hstack((next_state.angle, next_state.track, next_state.focus, next_state.opponents ,next_state.trackPos, next_state.speedX, next_state.speedY,  next_state.speedZ, next_state.wheelSpinVel/100.0, next_state.rpm))
-                #next_state, _ = self.dataset_builder.buildStateDataSet(s=next_state)
-            
+    
                 ### save to experience replay memory for batch selection
                 self.memory.memorize(state, action_with_noise[0], reward, next_state, done)
 
@@ -161,12 +167,23 @@ class DDPGAgent:
                 self.trainModel()
 
                 total_reward += reward
+                avg_speed += speedX
                 state = next_state
             
                 print("Episode: " +  str(e) + " Step: " + str(j) + " Action: " + str(action_with_noise) + " Reward: " + str(reward) + " Epsilon: " + str(self.epsilon))
 
                 if done:
                     all_total_rewards.append(total_reward)
+                    all_dist_raced.append(dist_raced)
+                    track_length = 5784
+                    percentage_of_track = round(((dist_raced/track_length) * 100),0)
+                    ### in case agent completed multiple laps which is likely for a well trained agent
+                    if percentage_of_track > 100: percentage_of_track = 100
+                    all_dist_percentage.append(percentage_of_track)
+
+                    avg_speed = avg_speed/j
+                    all_avg_speed.append(avg_speed)
+
                     break
 
 
@@ -174,8 +191,27 @@ class DDPGAgent:
 
         self.env.end()  
     
+        print("Plotting rewards!")
         plt.plot(all_total_rewards)
+        plt.xlabel("Episode")
+        plt.ylabel("Ertrag")
         plt.show()
+        print("Plotting distances!")
+        plt.plot(all_dist_raced)
+        plt.xlabel("Episode")
+        plt.ylabel("Distanz von Startlinie [m]")
+        plt.show()
+        print("Plotting completeness!")
+        plt.plot(all_dist_percentage)
+        plt.xlabel("Episode")
+        plt.ylabel("Vollstaendigkeit Strecke [%]")
+        plt.show()
+        print("Plotting avg speed!")
+        plt.plot(all_avg_speed)
+        plt.xlabel("Episode")
+        plt.ylabel("Durschn. Geschwindigkeit [km/h]")
+        plt.show()
+
 
     def trainModel(self):
         
@@ -226,4 +262,3 @@ class DDPGAgent:
             sys.exit()
 
         self.trainAgent()
-
