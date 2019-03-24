@@ -2,6 +2,7 @@ import numpy as np
 from collections import deque
 import random
 
+
 class DatasetBuilder:
     def buildStateDataSet(self, s):
         angle = s.angle
@@ -15,10 +16,8 @@ class DatasetBuilder:
         trackPos = s.trackPos
         wheelSpinVel = s.wheelSpinVel
         stack = np.hstack((angle, focus, speedX, speedY, speedZ, opponents, rpm, track, trackPos, wheelSpinVel))
-        #stack = np.reshape(stack,(1, stack.shape[0]))
+       
         return (stack, s.distRaced)
-
-
 
 class ExperienceReplayBuffer:
 
@@ -38,11 +37,12 @@ class ExperienceReplayBuffer:
     def getSize(self):
         return len(self.buffer)
 
-##########################################################
-###     Reference OU class:                            ###
-###     https://github.com/yanpanlau/DDPG-Keras-Torcs  ###
-##########################################################
+###########################################################
+###     Reference OU class:                             ###
+###     https://github.com/yanpanlau/DDPG-Keras-Torcs   ###
+###########################################################
 
 class OU:
-    def function(self, x, mu, theta, sigma):
+
+    def calc_noise(self, x, mu, theta, sigma):
         return theta * (mu - x) + sigma * np.random.randn(1)
