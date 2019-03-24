@@ -48,8 +48,8 @@ class DQNAgent:
 
         ### DQN Hyperparameters
         self.epsilon = 1.0
-        self.epsilon_decay = 0.9995
-        self.epsilon_min = 0.11
+        self.epsilon_decay = 1/5000
+        self.epsilon_min = 0.09
         self.batch_size = 128
         self.gamma = 0.99
         self.lr = 0.002
@@ -183,7 +183,8 @@ class DQNAgent:
 
             print("Calc Action!")
 
-        if random.random() <= min(0.1, self.epsilon):
+        ### concept of stochastic brake (described in util.py)
+        if random.random() <= min(0.15, self.epsilon):
             br = 0.3
         else: 
             br = 0
@@ -192,11 +193,13 @@ class DQNAgent:
 
     def lowerExploration(self):
         if self.epsilon > self.epsilon_min:
-            self.epsilon *= self.epsilon_decay
+            self.epsilon -= self.epsilon_decay
 
     def trainAgent(self):
         all_total_rewards = []
         all_dist_raced = []
+        all_dist_percentage = []
+        all_avg_speed = []
 
         for e in range(0, self.max_episodes):
 
@@ -214,7 +217,7 @@ class DQNAgent:
 
             
             total_reward = 0
-            total_dist_raced = 0
+            avg_speed = 0
 
             state, _ = self.dataset_builder.buildStateDataSet(s=state)
 
@@ -225,8 +228,7 @@ class DQNAgent:
                 
                 
                 next_state, reward, done, info = self.env.step(action)
-                
-                
+                speedX = next_state.speedX
                 next_state, dist_raced = self.dataset_builder.buildStateDataSet(s=next_state)
 
                 self.memory.memorize(state, action, reward, next_state, done)
@@ -234,7 +236,7 @@ class DQNAgent:
                 
                 self.train_model()
                 total_reward += reward
-                total_dist_raced += dist_raced
+                avg_speed += speedX
                 state = next_state
 
                 print("episode:", e, " step:", j, "  reward:", reward, "  action:", action, "  epsilon:", self.epsilon)
@@ -243,17 +245,41 @@ class DQNAgent:
                     
                     self.update_target_model()
                     all_total_rewards.append(total_reward)
-                    all_dist_raced.append(total_dist_raced)
+                    all_dist_raced.append(dist_raced)
+                    ### CHANGE BASED ON TRACK
+                    track_length = 5784
+                    percentage_of_track = round(((dist_raced/track_length) * 100),0)
+                    ### in case agent completed multiple laps which is likely for a well trained agent
+                    if percentage_of_track > 100: percentage_of_track = 100
+                    all_dist_percentage.append(percentage_of_track)
+
+                    avg_speed = avg_speed/j
+                    all_avg_speed.append(avg_speed)
                     break
 
         self.env.end()
 
         print("Plotting rewards!")
         plt.plot(all_total_rewards)
+        plt.xlabel("Episode")
+        plt.ylabel("Ertrag")
         plt.show()
         print("Plotting distances!")
         plt.plot(all_dist_raced)
+        plt.xlabel("Episode")
+        plt.ylabel("Distanz von Startlinie [m]")
         plt.show()
+        print("Plotting completeness!")
+        plt.plot(all_dist_percentage)
+        plt.xlabel("Episode")
+        plt.ylabel("Vollstaendigkeit Strecke [%]")
+        plt.show()
+        print("Plotting avg speed!")
+        plt.plot(all_avg_speed)
+        plt.xlabel("Episode")
+        plt.ylabel("Durschn. Geschwindigkeit [km/h]")
+        plt.show()
+
 
     def testAgent(self):
         ### set epsilon (exploration) low
