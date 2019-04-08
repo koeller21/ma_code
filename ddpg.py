@@ -282,9 +282,11 @@ class DDPGAgent:
         
         ### train networks
         self.critic.model.train_on_batch([states,actions], target) 
-        action_gradients = self.actor.model.predict(states)
-        grads = self.critic.gradients(states, action_gradients)
-        self.actor.train(states, grads)
+        actions = self.actor.model.predict(states)
+        ### nabla q(s, t(s))
+        gradients = self.critic.gradients(states, actions)
+        ### train actor 
+        self.actor.train(states, gradients)
 
         ### soft update
         self.actor.target_train()

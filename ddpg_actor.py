@@ -16,23 +16,39 @@ from keras.optimizers import Adam
 
 class Actor:
     def __init__(self, sess, state_size, action_size, tau, lr_actor):
+
+        ### sync tf session
         self.sess = sess
+        K.set_session(sess)
         
+        ### parameter called upsilon in thesis text
         self.tau = tau
         self.lr_actor = lr_actor
 
-        K.set_session(sess)
-
         ### Create model and target model since DDPG is off-policy
         self.model , self.weights, self.state = self.init_actor_model(state_size, action_size)   
-        self.target_model, self.target_weights, self.target_state = self.init_actor_model(state_size, action_size) 
+        ### get target model (for prediction), target weights (for soft update) and target state
+        self.target_model, _ , _ = self.init_actor_model(state_size, action_size) 
+
+        ### build tf var that holds action gradients
         self.action_gradient = tf.placeholder(tf.float32,[None, action_size])
+
+        ### compute gradient 
         self.parameter_gradients = tf.gradients(self.model.output, self.weights, -self.action_gradient)
+
+        ### combine gradients and weights
         gradients = zip(self.parameter_gradients, self.weights)
-        self.optimizer = tf.train.AdamOptimizer(lr_actor).apply_gradients(gradients)
+
+        ### Apply adam optimizer with gradients from zip
+        self.optimizer = tf.train.AdamOptimizer(self.lr_actor).apply_gradients(gradients)
+
+        ### run tf session after initalizing all tf variables
         self.sess.run(tf.global_variables_initializer())
 
     def init_actor_model(self, state_size,action_dim):
+
+        ### Build actor neural network
+        ### check thesis text for explanation
 
         inp = Input(shape=[state_size])   
         layer_1 = Dense(400, activation='relu')(inp)
@@ -48,9 +64,9 @@ class Actor:
     
         model = Model(inputs=inp,outputs=outp)
         
-        return model, model.trainable_weights, inp
+        return (model, model.trainable_weights, inp)
 
-    ### run tf session to calculate gradients
+    ### run tf session to train actor
     def train(self, states, action_gradients):
         self.sess.run(self.optimizer, feed_dict={
             self.state: states,

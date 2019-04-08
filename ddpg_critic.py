@@ -18,21 +18,33 @@ from keras.optimizers import Adam
 
 class Critic:
     def __init__(self, sess, state_size, action_size,  tau, lr_actor):
+        
+        ### sync tf session
         self.sess = sess
-       
+        K.set_session(sess)
+
+        ### parameter called upsilon in thesis text
         self.tau = tau
+
         self.lr_actor = lr_actor
         self.action_size = action_size
         
-        K.set_session(sess)
-
-        ### Create model and target model since DDPG is off-policy
+        ### Create model, get model ref, get model action inp, get model state inp
         self.model, self.action, self.state = self.init_critic_model(state_size, action_size)  
-        self.target_model, self.target_action, self.target_state = self.init_critic_model(state_size, action_size)  
+
+        ### Create target model mainly for soft update
+        self.target_model, _ , _ = self.init_critic_model(state_size, action_size)  
+
+        ### compute gradient -> model.output is Wx+b and self.action are actions
         self.action_gradients = tf.gradients(self.model.output, self.action)  
+
+        ### run tf session after initalizing all tf variables
         self.sess.run(tf.global_variables_initializer())
 
     def init_critic_model(self, state_size,action_dim):
+
+        ### Here the critic neural network is build.
+        ### check thesis text for explanation
 
         inp1 = Input(shape=[state_size])  
         inp2 = Input(shape=[action_dim], name='action')   
@@ -51,7 +63,7 @@ class Critic:
 
         model.compile(loss='mse', optimizer=adam)
 
-        return model, inp2, inp1 
+        return (model, inp2, inp1)
 
     ### get gradients from tf 
     def gradients(self, states, actions):
