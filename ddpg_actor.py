@@ -1,21 +1,25 @@
+from numpy.random import seed
+seed(26042019)
+from tensorflow import set_random_seed
+set_random_seed(19121909)
+
 import numpy as np
-
-from keras.initializers import normal, identity
-from keras.models import model_from_json
-from keras.models import Sequential, Model
-
-from keras.layers import Dense, Flatten, Input, merge, Lambda, concatenate
-from keras.optimizers import Adam
 import tensorflow as tf
 import keras.backend as K
 
+from keras.models import Sequential, Model
 
-class Actor(object):
-    def __init__(self, sess, state_size, action_size, BATCH_SIZE, TAU, LEARNING_RATE):
+from keras.layers import Dense, Input, concatenate
+from keras.optimizers import Adam
+
+
+
+class Actor:
+    def __init__(self, sess, state_size, action_size, tau, lr_actor):
         self.sess = sess
-        self.BATCH_SIZE = BATCH_SIZE
-        self.TAU = TAU
-        self.LEARNING_RATE = LEARNING_RATE
+        
+        self.tau = tau
+        self.lr_actor = lr_actor
 
         K.set_session(sess)
 
@@ -23,38 +27,40 @@ class Actor(object):
         self.model , self.weights, self.state = self.init_actor_model(state_size, action_size)   
         self.target_model, self.target_weights, self.target_state = self.init_actor_model(state_size, action_size) 
         self.action_gradient = tf.placeholder(tf.float32,[None, action_size])
-        self.params_grad = tf.gradients(self.model.output, self.weights, -self.action_gradient)
-        grads = zip(self.params_grad, self.weights)
-        self.optimize = tf.train.AdamOptimizer(LEARNING_RATE).apply_gradients(grads)
-        self.sess.run(tf.initialize_all_variables())
+        self.parameter_gradients = tf.gradients(self.model.output, self.weights, -self.action_gradient)
+        gradients = zip(self.parameter_gradients, self.weights)
+        self.optimizer = tf.train.AdamOptimizer(lr_actor).apply_gradients(gradients)
+        self.sess.run(tf.global_variables_initializer())
 
     def init_actor_model(self, state_size,action_dim):
 
-        S = Input(shape=[state_size])   
-        h0 = Dense(400, activation='relu')(S)
-        h1 = Dense(550, activation='relu')(h0)
-        Steering = Dense(1,activation='tanh',kernel_initializer='he_uniform')(h1)  
-        Acceleration = Dense(1,activation='sigmoid',kernel_initializer='he_uniform')(h1)   
-        Brake = Dense(1,activation='sigmoid',kernel_initializer='he_uniform')(h1) 
+        inp = Input(shape=[state_size])   
+        layer_1 = Dense(400, activation='relu')(inp)
+        layer_2 = Dense(550, activation='relu')(layer_1)
+        ### Using tanh activation for steering because its in range [-1;1]
+        Steering = Dense(1,activation='tanh',kernel_initializer='he_uniform')(layer_2)  
 
-        x = concatenate([Steering, Acceleration, Brake])
+        ### Using sigmoid activation for acceleration and brake because it can't be negative
+        Acceleration = Dense(1,activation='sigmoid',kernel_initializer='he_uniform')(layer_2)   
+        Brake = Dense(1,activation='sigmoid',kernel_initializer='he_uniform')(layer_2) 
+
+        outp = concatenate([Steering, Acceleration, Brake])
     
-        model = Model(inputs=S,outputs=x)
-        print(model.summary())
-        return model, model.trainable_weights, S
+        model = Model(inputs=inp,outputs=outp)
+        
+        return model, model.trainable_weights, inp
 
-    def train(self, states, action_grads):
-        self.sess.run(self.optimize, feed_dict={
+    ### run tf session to calculate gradients
+    def train(self, states, action_gradients):
+        self.sess.run(self.optimizer, feed_dict={
             self.state: states,
-            self.action_gradient: action_grads
+            self.action_gradient: action_gradients 
         })
 
+    ### update target actor network according to soft updates
     def target_train(self):
-        actor_weights = self.model.get_weights()
         actor_target_weights = self.target_model.get_weights()
-        for i in range(0,len(actor_weights)):
-            actor_target_weights[i] = self.TAU * actor_weights[i] + (1 - self.TAU)* actor_target_weights[i]
+        actor_weights = self.model.get_weights()
+        for i in range(0, len(actor_weights)):
+            actor_target_weights[i] = self.tau * actor_weights[i] + (1 - self.tau)* actor_target_weights[i]
         self.target_model.set_weights(actor_target_weights)
-
-
-

@@ -1,9 +1,11 @@
 # ###########################################################
 # ###     This file contains an implementation of         ###
-# ###     the DQN-Algorithm first published by            ###
+# ###     the DDPG-Algorithm first published by           ###
 # ###     Lillicrap et al. in Sep. 2015.                  ###
 # ###########################################################
 # ###     This implementation is written by Arne Koeller  ###
+# ###     Associated files are ddpg_actor.py and          ###
+# ###     ddpg_critic.py and util.py                      ###
 # ###########################################################
 # ###     References that have been used:                 ###
 # ###     Lillicrap et al. (2015)                         ###
@@ -36,14 +38,18 @@ import matplotlib.pyplot as plt
 
 class DDPGAgent:
 
-    def __init__(self, env, episodes=650):
+    def __init__(self, env, track, episodes=650):
 
         self.env = env
+        self.track = track
+
         self.max_episodes = episodes
-        self.max_steps = 10000
+        self.max_steps = 3000
 
         self.save_model = True
         self.load_model = False
+
+        self.restart_memory_leak = 25
 
         ### size of action- and state space
         self.state_size = 70
@@ -51,13 +57,13 @@ class DDPGAgent:
 
         ### DDPG Hyperparameters
         self.epsilon = 1.0
-        self.epsilon_decay = 1/11000
+        self.epsilon_decay = 1/96000
         self.epsilon_min = 0.07
         self.batch_size = 64
         self.gamma = 0.99
         self.tau = 0.001
-        self.lr_actor = 0.0001
-        self.lr_critic = 0.001
+        self.lr_actor = 0.00011
+        self.lr_critic = 0.0011
 
         ### set OU Process
         self.ou = OU()
@@ -91,6 +97,8 @@ class DDPGAgent:
         all_dist_raced = []
         all_dist_percentage = []
         all_avg_speed = []
+        all_car_hits = []
+        all_race_pos = []
 
         for e in range(self.max_episodes):
 
@@ -102,7 +110,7 @@ class DDPGAgent:
 
             ### relaunch torcs every 10th episode because 
             ### leaky memory would otherwise slow thread down 
-            if (e % 10) == 0: 
+            if (e % self.restart_memory_leak) == 0: 
                 state = self.env.reset(relaunch=True) 
             else:
                 state = self.env.reset()
@@ -114,6 +122,10 @@ class DDPGAgent:
 
             total_reward = 0
             avg_speed = 0
+            avg_racepos = 0
+
+            damage = 0
+            damage_hit_counter = 0
 
             for j in range(self.max_steps):
                 ### initialize numpy matrices to hold action values with OU noise
@@ -128,9 +140,9 @@ class DDPGAgent:
                 ###     https://yanpanlau.github.io/2016/10/11/Torcs-Keras.html ###
                 ###     and own experiment                                      ###
                 ###################################################################
-                noise[0][0] = max(self.epsilon, 0) * self.ou.calc_noise(action[0][0],  0.0 , 0.55, 0.15)
-                noise[0][1] = max(self.epsilon, 0) * self.ou.calc_noise(action[0][1],  0.55 , 1.00, 0.10)
-                noise[0][2] = max(self.epsilon, 0) * self.ou.calc_noise(action[0][2], -0.1 , 1.00, 0.05)
+                noise[0][0] = self.epsilon * self.ou.calc_noise(action[0][0],  0.0 , 0.55, 0.15)
+                noise[0][1] = self.epsilon * self.ou.calc_noise(action[0][1],  0.55 , 1.00, 0.10)
+                noise[0][2] = self.epsilon * self.ou.calc_noise(action[0][2], -0.1 , 1.00, 0.05)
 
                 ###################################################################
                 ### Concept of a "stochastic" break adapted and improved from   ###
@@ -142,7 +154,7 @@ class DDPGAgent:
                 ### min(0.18, self.epsilon)                                     ###
                 ################################################################### 
                 if random.random() <= min(0.18, self.epsilon):
-                   noise[0][2] = max(self.epsilon, 0) * self.ou.calc_noise(action[0][2],  0.25 , 1.00, 0.10)
+                   noise[0][2] = self.epsilon * self.ou.calc_noise(action[0][2],  0.25 , 1.00, 0.10)
 
                 ### Add OU noise to actions
                 action_with_noise[0][0] = action[0][0] + noise[0][0]
@@ -154,7 +166,9 @@ class DDPGAgent:
                 ### build state representation
                 dist_raced = next_state.distRaced
                 speedX = next_state.speedX
-                print(speedX)
+                pre_damage = damage
+                damage = next_state.damage
+                racePos = next_state.racePos
                 next_state = np.hstack((next_state.angle, next_state.track, next_state.focus, next_state.opponents ,next_state.trackPos, next_state.speedX, next_state.speedY,  next_state.speedZ, next_state.wheelSpinVel/100.0, next_state.rpm))
     
                 ### save to experience replay memory for batch selection
@@ -168,21 +182,39 @@ class DDPGAgent:
 
                 total_reward += reward
                 avg_speed += speedX
+                avg_racepos += racePos
+
                 state = next_state
+
+                ### detect damange
+                if damage - pre_damage > 0:
+                    damage_hit_counter += 1
             
                 print("Episode: " +  str(e) + " Step: " + str(j) + " Action: " + str(action_with_noise) + " Reward: " + str(reward) + " Epsilon: " + str(self.epsilon))
 
                 if done:
                     all_total_rewards.append(total_reward)
                     all_dist_raced.append(dist_raced)
-                    track_length = 5784
+
+
+                    ### use track length according to chosen track
+                    if self.track == "eroad":
+                        track_length = 3260
+                    elif self.track == "cgspeedway":
+                        track_length = 2057
+                    elif self.track == "forza":
+                        track_length = 5784
+                    
+                    
                     percentage_of_track = round(((dist_raced/track_length) * 100),0)
                     ### in case agent completed multiple laps which is likely for a well trained agent
                     if percentage_of_track > 100: percentage_of_track = 100
                     all_dist_percentage.append(percentage_of_track)
 
-                    avg_speed = avg_speed/j
-                    all_avg_speed.append(avg_speed)
+                    all_avg_speed.append((avg_speed/j))
+
+                    all_car_hits.append(damage_hit_counter)
+                    all_race_pos.append(int(avg_racepos/j))
 
                     break
 
@@ -190,7 +222,8 @@ class DDPGAgent:
             
 
         self.env.end()  
-    
+
+        ### All the plotting stuff
         print("Plotting rewards!")
         plt.plot(all_total_rewards)
         plt.xlabel("Episode")
@@ -211,6 +244,16 @@ class DDPGAgent:
         plt.xlabel("Episode")
         plt.ylabel("Durschn. Geschwindigkeit [km/h]")
         plt.show()
+        print("Plotting car hits!")
+        plt.plot(all_car_hits)
+        plt.xlabel("Episode")
+        plt.ylabel("Unfaelle des Fahrzeuges")
+        plt.show()
+        print("Plotting avg race pos!")
+        plt.plot(all_race_pos)
+        plt.xlabel("Episode")
+        plt.ylabel("Durschn. Position")
+        plt.show()
 
 
     def trainModel(self):
@@ -227,6 +270,7 @@ class DDPGAgent:
         dones = np.asarray([b[4] for b in mini_batch])
         
         ### get q values from target critic model
+        ### q(s, t(s), w') in thesis
         target_q_values = self.critic.target_model.predict([new_states, self.actor.target_model.predict(new_states)])  
         
         ### iterate through minibatch, update target according to bellman eq.
@@ -241,6 +285,8 @@ class DDPGAgent:
         action_gradients = self.actor.model.predict(states)
         grads = self.critic.gradients(states, action_gradients)
         self.actor.train(states, grads)
+
+        ### soft update
         self.actor.target_train()
         self.critic.target_train()
 

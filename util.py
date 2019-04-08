@@ -43,6 +43,6 @@ class ExperienceReplayBuffer:
 ###########################################################
 
 class OU:
-
+    ### Here, np.random.randn(1) is the wiener process
     def calc_noise(self, x, mu, theta, sigma):
         return theta * (mu - x) + sigma * np.random.randn(1)

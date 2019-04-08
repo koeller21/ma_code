@@ -10,6 +10,10 @@
 ###     https://github.com/rlcode/reinforcement-learning ##
 ###########################################################
 
+from numpy.random import seed
+seed(26042019)
+from tensorflow import set_random_seed
+set_random_seed(19121909)
 
 from util import DatasetBuilder
 from util import ExperienceReplayBuffer
@@ -19,7 +23,7 @@ from gym_torcs import TorcsEnv
 
 import random
 import numpy as np
-from collections import deque
+
 from keras.layers import Dense, Input
 from keras.optimizers import Adam
 from keras.models import Sequential, Model, load_model
@@ -29,16 +33,18 @@ import matplotlib.pyplot as plt
 
 
 class DQNAgent:
-    def __init__(self, env, num_of_episodes=650):
+    def __init__(self, env, track, num_of_episodes=650):
 
         self.env = env
+        self.track = track
 
         ### episodes and steps
         self.max_episodes = num_of_episodes
-        self.max_steps = 100000
+        self.max_steps = 4000
         
         self.save_model = True
         self.load_model = False
+        self.restart_memory_leak = 25
 
         ### size of action- and state space
         self.state_size = 70
@@ -48,7 +54,7 @@ class DQNAgent:
 
         ### DQN Hyperparameters
         self.epsilon = 1.0
-        self.epsilon_decay = 1/5000
+        self.epsilon_decay = 1/6500
         self.epsilon_min = 0.09
         self.batch_size = 128
         self.gamma = 0.99
@@ -184,7 +190,7 @@ class DQNAgent:
             print("Calc Action!")
 
         ### concept of stochastic brake (described in util.py)
-        if random.random() <= min(0.15, self.epsilon):
+        if random.random() <= min(0.12, self.epsilon):
             br = 0.3
         else: 
             br = 0
@@ -210,7 +216,7 @@ class DQNAgent:
 
             ### relaunch torcs every 10th episode because 
             ### leaky memory would otherwise slow thread down 
-            if (e % 10) == 0: 
+            if (e % self.restart_memory_leak) == 0: 
                 state = self.env.reset(relaunch=True) 
             else:
                 state = self.env.reset()
@@ -246,8 +252,17 @@ class DQNAgent:
                     self.update_target_model()
                     all_total_rewards.append(total_reward)
                     all_dist_raced.append(dist_raced)
-                    ### CHANGE BASED ON TRACK
-                    track_length = 5784
+
+                    
+                    ### use track length according to chosen track
+                    if self.track == "eroad":
+                        track_length = 3260
+                    elif self.track == "cgspeedway":
+                        track_length = 2057
+                    elif self.track == "forza":
+                        track_length = 5784
+                    
+
                     percentage_of_track = round(((dist_raced/track_length) * 100),0)
                     ### in case agent completed multiple laps which is likely for a well trained agent
                     if percentage_of_track > 100: percentage_of_track = 100
@@ -309,22 +324,23 @@ class DQNAgent:
         mini_batch = self.memory.sampleRandomBatch(self.batch_size)
 
         ### initialize empty numpy matrices
-        state_input = np.zeros((self.batch_size, self.state_size))
-        state_target = np.zeros((self.batch_size, self.state_size))
+        state = np.zeros((self.batch_size, self.state_size))
+        state_next = np.zeros((self.batch_size, self.state_size))
         action, reward, done = [], [], []
 
         ### loop through batch and build "batchsize X 1" vectors 
         ### of values in replay memory to make mini batch update
         for i in range(self.batch_size):
-            state_input[i] = mini_batch[i][0]
+            state[i] = mini_batch[i][0]
             action.append(mini_batch[i][1])
             reward.append(mini_batch[i][2])
-            state_target[i] = mini_batch[i][3]
+            state_next[i] = mini_batch[i][3]
             done.append(mini_batch[i][4])
 
-        ### 
-        target = self.model.predict(state_input)
-        target_val = self.target_model.predict(state_target)
+        ### get action prediction from model (the one that we seek to improve)
+        target = self.model.predict(state)
+        ### get action prediction from target model (the one calculating the TD Error)
+        target_val = self.target_model.predict(state_next)
  
         for i in range(self.batch_size):
 
@@ -366,6 +382,11 @@ class DQNAgent:
             elif action[i][2] == 0.5:
                 b = 2
             
+
+            ### apply bellman optimality equation
+            ### q(s,a) = r + gamma * q(s',a')
+            ### EXCEPT this was the last (s, a, r, s') tuple, then a'
+            ### does not exist, so we just use the reward r instead
             if done[i]:
                 target[0][i][x] = reward[i]
                 target[1][i][v] = reward[i]
@@ -376,6 +397,6 @@ class DQNAgent:
                 target[2][i][b] = reward[i] + self.gamma * (np.argmax(target_val[2][i]))
             
         ### train model
-        self.model.fit(state_input, target, batch_size=self.batch_size, epochs=1, verbose=0)
+        self.model.fit(state, target, batch_size=self.batch_size, epochs=1, verbose=0)
 
 

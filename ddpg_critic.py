@@ -1,23 +1,27 @@
+from numpy.random import seed
+seed(26042019)
+from tensorflow import set_random_seed
+set_random_seed(19121909)
+
 import numpy as np
-
-from keras.initializers import normal, identity
-from keras.models import model_from_json, load_model
-
-from keras.models import Sequential
-from keras.layers import Dense, Flatten, Input, merge, Lambda, Activation, concatenate
-from keras.models import Sequential, Model
-from keras.optimizers import Adam
 import keras.backend as K
 import tensorflow as tf
 
 
+from keras.models import Sequential
+from keras.layers import Dense, Input, Activation, concatenate
+from keras.models import Sequential, Model
+from keras.optimizers import Adam
 
-class Critic(object):
-    def __init__(self, sess, state_size, action_size, BATCH_SIZE, TAU, LEARNING_RATE):
+
+
+
+class Critic:
+    def __init__(self, sess, state_size, action_size,  tau, lr_actor):
         self.sess = sess
-        self.BATCH_SIZE = BATCH_SIZE
-        self.TAU = TAU
-        self.LEARNING_RATE = LEARNING_RATE
+       
+        self.tau = tau
+        self.lr_actor = lr_actor
         self.action_size = action_size
         
         K.set_session(sess)
@@ -25,37 +29,41 @@ class Critic(object):
         ### Create model and target model since DDPG is off-policy
         self.model, self.action, self.state = self.init_critic_model(state_size, action_size)  
         self.target_model, self.target_action, self.target_state = self.init_critic_model(state_size, action_size)  
-        self.action_grads = tf.gradients(self.model.output, self.action)  
-        self.sess.run(tf.initialize_all_variables())
+        self.action_gradients = tf.gradients(self.model.output, self.action)  
+        self.sess.run(tf.global_variables_initializer())
 
     def init_critic_model(self, state_size,action_dim):
 
-        S = Input(shape=[state_size])  
-        A = Input(shape=[action_dim], name='action2')   
-        w1 = Dense(400, activation='relu',  kernel_initializer='he_uniform')(S)
-        a1 = Dense(500, activation='linear',  kernel_initializer='he_uniform')(A) 
-        h1 = Dense(500, activation='linear', kernel_initializer='he_uniform')(w1)
+        inp1 = Input(shape=[state_size])  
+        inp2 = Input(shape=[action_dim], name='action')   
+        layer1_state = Dense(400, activation='relu',  kernel_initializer='he_uniform')(inp1)
+        layer2_state = Dense(500, activation='linear', kernel_initializer='he_uniform')(layer1_state)
+        layer1_action = Dense(500, activation='linear',  kernel_initializer='he_uniform')(inp2) 
+        
   
-        h2 = concatenate([h1, a1])
+        layer_together = concatenate([layer2_state, layer1_action])
+        layer3 = Dense(550, activation='relu')(layer_together)
 
-        h3 = Dense(550, activation='relu')(h2)
-        V = Dense(action_dim,activation='linear')(h3)   
-        model = Model(inputs=[S,A],outputs=V)
-        adam = Adam(lr=self.LEARNING_RATE)
+        outp = Dense(action_dim,activation='linear')(layer3)   
+
+        model = Model(inputs=[inp1,inp2],outputs=outp)
+        adam = Adam(lr=self.lr_actor)
+
         model.compile(loss='mse', optimizer=adam)
-        return model, A, S 
 
+        return model, inp2, inp1 
+
+    ### get gradients from tf 
     def gradients(self, states, actions):
-        return self.sess.run(self.action_grads, feed_dict={
+        return self.sess.run(self.action_gradients, feed_dict={
             self.state: states,
-            self.action: actions
-        })[0]
+            self.action: actions 
+            })[0]
 
+    ### update target critic network according to soft updates 
     def target_train(self):
-        critic_weights = self.model.get_weights()
         critic_target_weights = self.target_model.get_weights()
+        critic_weights = self.model.get_weights()
         for i in range(0,len(critic_weights)):
-            critic_target_weights[i] = self.TAU * critic_weights[i] + (1 - self.TAU)* critic_target_weights[i]
+            critic_target_weights[i] = self.tau * critic_weights[i] + (1 - self.tau)* critic_target_weights[i]
         self.target_model.set_weights(critic_target_weights)
-
-

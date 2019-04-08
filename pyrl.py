@@ -2,22 +2,18 @@
 ###########################################################
 ###     pyrl has been created as part of my             ###
 ###     masterthesis in computer science at the         ###
-###     Hochschule Bochum in Germany in March 2019.     ###
+###     Hochschule Bochum in March 2019.                ###
 ###                                                     ###
 ###     I hereby declare that the program submitted     ###
 ###     is my own unaided work. All direct or indirect  ###
 ###     sources used are acknowledged as references.    ###
+###                                                     ###
 ###     Arne Koeller                                    ###
 ###########################################################
 ###########################################################
 
-from numpy.random import seed
-seed(26042019)
-from tensorflow import set_random_seed
-set_random_seed(19121909)
-
 import sys
-import argparse
+
 
 from gym_torcs import TorcsEnv
 from dqn import DQNAgent
@@ -26,49 +22,72 @@ from ddpg import DDPGAgent
 
 class Pyrl:
     def __init__(self):
-        pass
+        self.numOfEpisodes = 320 
+        self.parseArguments()
     
     def parseArguments(self):
-        parser = argparse.ArgumentParser(description='Reinforcement Learning Algos in Python')
-        parser.add_argument("algo", type=str, help="specific RL-Algorithm   [dqn | ddpg]")
-        parser.add_argument("env",  type=str, help="specific RL-Environment [torcs]")
-        parser.add_argument("--mode", "-m", required=False, help="specific mode [train | test]")
-        parser.add_argument("--episodes", "-e", required=False, help="number of episodes, e.g. 500")
-        return parser.parse_args()
+
+        ### abort if no arguments supplied
+        if len(sys.argv) < 2:
+            print("Syntax: python3 pyrl.py <dqn | ddpg> <train | test> <eroad | cgspeedway | forza> ...... i.e. pyrl.py dqn test cgspeedway")
+            sys.exit("Syntax error")
+
+        ### set algorithm
+        if sys.argv[1] == "dqn":
+            self.algorithm = "dqn"
+        elif sys.argv[1] == "ddpg":
+            self.algorithm = "ddpg"
+        else:
+            print("Syntax: python3 pyrl.py <dqn | ddpg> <train | test> <eroad | cgspeedway | forza> ...... i.e. pyrl.py dqn test cgspeedway")
+            sys.exit("Syntax error")
+
+        ### set modus
+        if sys.argv[2] == "train":
+            self.modus = "train"
+        elif sys.argv[2] == "test":
+            self.modus = "test"
+        else:
+            print("Syntax: python3 pyrl.py <dqn | ddpg> <train | test> <eroad | cgspeedway | forza> ...... i.e. pyrl.py dqn test cgspeedway")
+            sys.exit("Syntax error")
+
+        ### set track
+        if sys.argv[3] == "eroad":
+            self.track = "eroad"
+        elif sys.argv[3] == "cgspeedway":
+            self.track = "cgspeedway"
+        elif sys.argv[3] == "forza":
+            self.track = "forza"
+        else:
+            print("Syntax: python3 pyrl.py <dqn | ddpg> <train | test> <eroad | cgspeedway | forza> ...... i.e. pyrl.py dqn test cgspeedway")
+            sys.exit("Syntax error")
+
+    def run(self):
+        ### create TORCS environment
+        env = TorcsEnv(vision=False, throttle=True)   
+
+        ### start run according to supplied arguments
+        if self.algorithm == "dqn" and self.modus == "train":
+            agent = DQNAgent(env, self.track, self.numOfEpisodes)
+            agent.trainAgent()
+        elif self.algorithm == "dqn" and self.modus == "test":
+            agent = DQNAgent(env, self.track, self.numOfEpisodes)
+            agent.testAgent()
+        elif self.algorithm == "ddpg" and self.modus == "train":
+            agent = DDPGAgent(env, self.track, self.numOfEpisodes)
+            agent.trainAgent()
+        elif self.algorithm == "ddpg" and self.modus == "test":
+            agent = DDPGAgent(env, self.track, self.numOfEpisodes)
+            agent.testAgent()
+    
 
 def main():
 
-    #rl = Pyrl()
-    #args = rl.parseArguments()
-    #print(args.algo)
-    #print(args.env)
-    #print(args.mode)
-    #print(args.episodes)
-
-    env = TorcsEnv(vision=False, throttle=True)    
-    
-    agent = DQNAgent(env, 870)
-    #agent = DDPGAgent(env, 870)
-    agent.trainAgent()
-    #agent.testAgent()
+    rl = Pyrl()
+    rl.run()
     
 
 if __name__ == "__main__":
     main()
-
-    #rl_environment_to_be_used = args.env
-    #rl_algorithm_to_be_used = args.algo
-    #rl_mode_to_be_used = args.mode
-
-    #print(rl_algorithm_to_be_used)
-    #print(rl_environment_to_be_used)
-    #print(rl_mode_to_be_used)
-
-    #if rl_environment_to_be_used == "torcs":
-        
-    #else:
-    #    print("This script only supports the TORCS environment!")
-    #    sys.exit()
 
     
 

@@ -227,8 +227,9 @@ class Client():
                                        opt[1], opt[0], why, usage))
             sys.exit(-1)
         if len(args) > 0:
-            print('Superflous input? %s\n%s' % (', '.join(args), usage))
-            sys.exit(-1)
+            pass
+            #print('Superflous input? %s\n%s' % (', '.join(args), usage))
+            #sys.exit(-1)
 
     def get_servers_input(self):
         '''Server's input is stored in a ServerState object'''
