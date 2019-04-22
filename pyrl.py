@@ -22,7 +22,7 @@ from ddpg import DDPGAgent
 
 class Pyrl:
     def __init__(self):
-        self.numOfEpisodes = 300 
+        self.numOfEpisodes = 350 
         self.parseArguments()
     
     def parseArguments(self):

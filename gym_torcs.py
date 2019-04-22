@@ -136,12 +136,17 @@ class TorcsEnv:
         sp = np.array(obs['speedX'])
         damage = np.array(obs['damage'])
         rpm = np.array(obs['rpm'])
+        oppmin = np.min(np.array(obs['opponents']))
+        if oppmin <= 7: 
+            reward_car_distance = -10
+        else:
+            reward_car_distance = 0
 
         ########### ATTENTION #########################
         ########### Change reward function here #######
         
         #### Reward function 1 ###############
-        progress = sp*np.cos(obs['angle']) - np.abs(sp*np.sin(obs['angle'])) - sp * np.abs(obs['trackPos']) 
+        #progress = sp*np.cos(obs['angle']) - np.abs(sp*np.sin(obs['angle'])) - sp * np.abs(obs['trackPos']) 
         ###############################################
 
 
@@ -151,7 +156,7 @@ class TorcsEnv:
 
 
         #### Reward function 3 ###############
-        #progress = sp* np.cos(obs['angle']) 
+        progress = sp* np.cos(obs['angle']) - np.abs(sp*np.sin(obs['angle'])) - sp * np.abs(obs['trackPos'])  + reward_car_distance
         ###############################################
 
 

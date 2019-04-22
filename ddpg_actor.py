@@ -42,7 +42,7 @@ class Actor:
         ### Apply adam optimizer with gradients from zip
         self.optimizer = tf.train.AdamOptimizer(self.lr_actor).apply_gradients(gradients)
 
-        ### run tf session after initalizing all tf variables
+        ### run tf session (comp graph) after initalizing all tf variables
         self.sess.run(tf.global_variables_initializer())
 
     def init_actor_model(self, state_size,action_dim):

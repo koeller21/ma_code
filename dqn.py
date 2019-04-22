@@ -268,8 +268,8 @@ class DQNAgent:
                     if percentage_of_track > 100: percentage_of_track = 100
                     all_dist_percentage.append(percentage_of_track)
 
-                    avg_speed = avg_speed/j
-                    all_avg_speed.append(avg_speed)
+                    all_avg_speed.append((avg_speed/j))
+
                     break
 
         self.env.end()
@@ -288,11 +288,13 @@ class DQNAgent:
         plt.plot(all_dist_percentage)
         plt.xlabel("Episode")
         plt.ylabel("Vollstaendigkeit Strecke [%]")
+        plt.axis([0, 350, 0, 100])
         plt.show()
         print("Plotting avg speed!")
         plt.plot(all_avg_speed)
         plt.xlabel("Episode")
         plt.ylabel("Durschn. Geschwindigkeit [km/h]")
+        plt.axis([0, 350, 0, 1])
         plt.show()
 
 

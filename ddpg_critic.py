@@ -38,7 +38,7 @@ class Critic:
         ### compute gradient -> model.output is Wx+b and self.action are actions
         self.action_gradients = tf.gradients(self.model.output, self.action)  
 
-        ### run tf session after initalizing all tf variables
+        ### run tf session (comp graph) after initalizing all tf variables
         self.sess.run(tf.global_variables_initializer())
 
     def init_critic_model(self, state_size,action_dim):
